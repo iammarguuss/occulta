@@ -1,23 +1,15 @@
 {
-  "name": "occulta",
-  "version": "0.0.1",
-  "description": "First fully fragmented db that does not download full table for sql experience",
+  "name": "ulda-test",
+  "version": "0.1.0",
+  "description": "Template for testing ULDA authentication.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "test": "node index.js"
   },
   "keywords": [
-    "occulta"
+    "ulda",
+    "authentication",
+    "example"
   ],
-  "author": "IAMMarguuss",
-  "license": "MIT",
-  "devDependencies": {
-    "nodemon": "^3.1.9"
-  },
-  "dependencies": {
-    "express": "^5.1.0",
-    "mongoose": "^8.13.2"
-  }
+  "license": "MIT"
 }

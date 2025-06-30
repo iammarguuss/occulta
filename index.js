@@ -1,29 +1,10 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const path = require('path');
+const UldaAuth = require('./ulda');
 
-const app = express();
+const { publicKey, privateKey } = UldaAuth.generateKeys();
+const ulda = new UldaAuth(privateKey, publicKey);
 
-mongoose.connect('mongodb://localhost:27017/occulta', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => {
-  console.log('connected to MongoDB');
-})
-.catch(err => {
-  console.error('shit happened to MongoDB:', err);
-});
+const message = 'ULDA authentication demo';
+const signature = ulda.sign(message);
 
-app.use(express.static(path.join(__dirname, 'public')));
-
-
-
-
-
-
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server works on ${PORT}`);
-});
+console.log('Signature (hex):', signature.toString('hex'));
+console.log('Valid:', ulda.verify(message, signature));

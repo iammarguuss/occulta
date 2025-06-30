@@ -1,27 +1,14 @@
-# occulta
-This project runs a Node.js server (using Express) connected to MongoDB.
+# ULDA Authentication Template
+
+This repository provides a minimal setup to experiment with a simple ULDA-like authentication process using Node.js.
 
 ## Requirements
-- Node.js (version 16+ recommended)
-- npm (comes bundled with Node.js)
-- MongoDB Community Edition (running locally)
+- Node.js 16+
 
-## Installation
-
-### Clone the repository:
+## Usage
+Install dependencies (none required) and run the example:
 ```bash
-git clone <URL_of_your_repository>
-cd occulta
+node index.js
 ```
 
-### Install dependencies:
-```bash
-npm install
-```
-
-### Run the server (in dev mode):
-```bash
-npm run dev
-```
-
-This will start the server with `nodemon`, automatically restarting on file changes.
+The script will generate a key pair, sign a message, and verify the signature.

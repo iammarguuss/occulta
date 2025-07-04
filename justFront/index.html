@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ULDA Front Demo</title>
+  <style>
+    /* Dark background */
+    html,body{height:100%;margin:0;background:#121212;color:#e0e0e0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
+    #info{font-size:1rem;opacity:.65}
+  </style>
+  <script src="main.js"></script>
+  <script>
+    // ---- demo run ----
+    const cfg={
+        version: '1',
+        fmt:    { input:'hex', export:'bytes',},
+        sign:   { N:5, mode:'S', hash:'SHA-256', originSize:256}
+    };        // simple skip‑window demo
+        const signer = new UldaSign(cfg);
+    
+    (async ()=>{
+        const origin = await signer.New();
+        console.log("ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ORIGIN= ",origin)
+        const origin2 = await signer.stepUp(origin);
+        console.log("V2: ",origin2);
+        const origin3 = await signer.stepUp(origin2);
+        console.log("V3: ",origin3);
+        const sig1 = await signer.sign(origin);
+        console.log("s1: ",sig1);
+        const sig2 = await signer.sign(origin2);
+        console.log("s2: ",sig2);
+        const sig3 = await signer.sign(origin3);
+        console.log("s3: ",sig3);
+        const verify12 = await signer.verify(sig1,sig2)
+        const verify23 = await signer.verify(sig2,sig3)
+        const verify13 = await signer.verify(sig1,sig3)
+
+    })();
+  </script>
+</head>
+<body>
+  <div id="info">Open DevTools → Console to watch ULDA in action</div>
+</body>
+</html>

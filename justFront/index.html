@@ -8,14 +8,14 @@
     html,body{height:100%;margin:0;background:#121212;color:#e0e0e0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
     #info{font-size:1rem;opacity:.65}
   </style>
-  <script src="main.js"></script>
+  <script src="main copy.js"></script>
   <script>
     // ---- demo run ----
     const cfg={
         version: '1',
-        fmt:    { input:'hex', export:'bytes',},
-        sign:   { N:5, mode:'S', hash:'SHA-256', originSize:256}
-    };        // simple skip‑window demo
+        fmt:    { export:'bytes'},
+        sign:   { N:200, mode:'X', hash:'SHA-256', originSize:4096}
+    };
         const signer = new UldaSign(cfg);
     
     (async ()=>{
@@ -25,15 +25,30 @@
         console.log("V2: ",origin2);
         const origin3 = await signer.stepUp(origin2);
         console.log("V3: ",origin3);
+        const origin4 = await signer.stepUp(origin3);
+        console.log("V4: ",origin4);
+        const origin5 = await signer.stepUp(origin4);
+        console.log("V5: ",origin5);
+        const origin6 = await signer.stepUp(origin5);
+        console.log("V6: ",origin6);
         const sig1 = await signer.sign(origin);
         console.log("s1: ",sig1);
         const sig2 = await signer.sign(origin2);
         console.log("s2: ",sig2);
         const sig3 = await signer.sign(origin3);
         console.log("s3: ",sig3);
+        const sig4 = await signer.sign(origin4);
+        console.log("s4: ",sig4);
+        const sig5 = await signer.sign(origin5);
+        console.log("s5: ",sig5);
+        const sig6 = await signer.sign(origin6);
+        console.log("s6: ",sig6);
         const verify12 = await signer.verify(sig1,sig2)
+        console.log(verify12)
         const verify23 = await signer.verify(sig2,sig3)
-        const verify13 = await signer.verify(sig1,sig3)
+        console.log(verify12)
+        const verify14 = await signer.verify(sig1,sig3)
+        console.log(verify14)
 
     })();
   </script>

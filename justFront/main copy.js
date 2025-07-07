@@ -15,11 +15,9 @@ class UldaSign {
         pack: cfg?.sign?.pack ?? 'simpleSig'
       }
     };
-
     /* ---------- кодовые таблицы ---------- */
     this.encoder = { mode: { S: 0x01, X: 0x02}, algorithm: { 'SHA-256': 0x01 } };
     this.decoder = { mode: { 0x01: 'S', 0x02: 'X'}, algorithm: { 0x01: 'SHA-256' } };
-
     /* ---------- convert ---------- */
     this.convert = {
       bytesToHex: u8 => Array.from(u8).map(b => b.toString(16).padStart(2, '0')).join(''),
@@ -72,7 +70,6 @@ class UldaSign {
         return a;
       }
     };
-
     /* ---------- crypto helpers ---------- */
     const self = this;
     this.enc = {
@@ -109,7 +106,6 @@ class UldaSign {
           const curRow = [];
           for (let i = 0; i < prevRow.length - 1; i++)
             curRow.push(await self.enc.hash(cat(prevRow[i], prevRow[i + 1]), alg));
-    
           sigBlocks.push(curRow[0]);             // F_d^d = вершина столбца d
           prevRow = curRow;
         }
@@ -127,27 +123,16 @@ class UldaSign {
         const sigBytes = self.convert.concatBytes(...sigBlocks);
         return this.actions.PackSignature(sigBytes, { index, N, mode, alg });
       },
-
       /* --- верификация двух подписей --- */
       VerifyS: async (oldSig, newSig) => {
         const older = oldSig.index < newSig.index ? oldSig : newSig;
         const newer = oldSig.index < newSig.index ? newSig : oldSig;
         const g = Number(newer.index - older.index);
         if (g <= 0 || g >= older.N) return false; // пропуск≥N невозможен
-
-        // // длина одного блока = sigBytes.length / N
-        // const blkLen = older.sigBytes.length / older.N;
-        // if (blkLen * older.N !== older.sigBytes.length || older.sigBytes.length !== newer.sigBytes.length)
-        //   return false;
-        // восстановим массивы блоков
-        // const toBlocks = sigBytes => Array.from({ length: older.N }, (_, i) => sigBytes.slice(i * blkLen, (i + 1) * blkLen));
-        // const oldBlocks = toBlocks(older.sigBytes);
-        // const newBlocks = toBlocks(newer.sigBytes);
-            if (older.originLen !== newer.originLen ||
-                older.blkLen    !== newer.blkLen) return false;
-            const oldBlocks = this.convert.splitSig(older);
-            const newBlocks = this.convert.splitSig(newer);
-
+        if (older.originLen !== newer.originLen ||
+            older.blkLen    !== newer.blkLen) return false;
+        const oldBlocks = this.convert.splitSig(older);
+        const newBlocks = this.convert.splitSig(newer);
         for (let i = 0; i < older.N - g; i++) {
           const hashed = await self.enc.hashIter(newBlocks[i], g, older.alg);
 //        console.log("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",hashed,oldBlocks[i + g])
@@ -167,17 +152,8 @@ class UldaSign {
         if (older.sigBytes.length !== newer.sigBytes.length ||
             older.sigBytes.length % N !== 0) return false;
         const blkLen = older.sigBytes.length / N;
-        // const split = buf => Array.from(
-        //     { length: N },
-        //     (_, i) => buf.slice(i * blkLen, (i + 1) * blkLen)
-        // );
-        // const A = split(older.sigBytes);          // Sₖ  = [tₖ, f₀, f₁, …]
-        // const B = split(newer.sigBytes);          // Sₖ₊₁ = [tₖ₊₁, g₀, g₁, …]
-    
         const A = this.convert.splitSig(older);
         const B = this.convert.splitSig(newer);
-
-
         const cat = self.convert.concatBytes;
         /* правило:  A[d] ?= H( A[d‑1] ∥ B[d‑1] ),   d = 1…N‑1  */
         for (let d = 1; d < N; d++) {
@@ -219,63 +195,40 @@ class UldaSign {
           default: return false;
         }
       },
-
-      /* --- utils (parser/packer/… остаются прежними) --- */
-      // ... (оставляем существующий код из v1.2 без изменений кроме SigImporter)
-      SigImporter: pkg => {
-        // const bytes = pkg instanceof Uint8Array ? pkg : self.convert.importToBytes(pkg);
-        // const headerLen = bytes[1];
-        // const N   = bytes[2];
-        // const mode= self.decoder.mode[bytes[3]] ?? 'U';
-        // const alg = self.decoder.algorithm[bytes[4]] ?? 'UNK';
-        // let idx=0n; for (let i=5;i<headerLen-1;i++) idx=(idx<<8n)|BigInt(bytes[i]);
-        // const sigBytes = bytes.slice(headerLen);
-        // const blkLen = sigBytes.length / N;
-        // if (!Number.isInteger(blkLen)) throw new Error('div');
-        // return { bytes, N, mode, alg, index: idx, sigBytes, blkLen };
-      },
-                    import : {
-                    /** Импорт подписи (бывший SigImporter) */
-                    signature : pkg => {
-                      const bytes = pkg instanceof Uint8Array ? pkg : self.convert.importToBytes(pkg);
-                      const headerLen = bytes[1];
-                      const N   = bytes[2];
-                      const mode= self.decoder.mode[bytes[3]] ?? 'U';
-                      const alg = self.decoder.algorithm[bytes[4]] ?? 'UNK';
-                      let idx=0n; for (let i=5;i<headerLen-1;i++) idx=(idx<<8n)|BigInt(bytes[i]);
-                      const sigBytes = bytes.slice(headerLen);
-                      const originLen = (self.globalConfig.sign.originSize ?? 256) >>> 3;
-                      const restLen   = sigBytes.length - originLen;
-                      const blkLen    = restLen / (N - 1);
-                      if (restLen < 0 || !Number.isInteger(blkLen))
-                          throw new Error('SigImporter: wrong sizes');
-
-                      /* разрезаем подпись на массив блоков */
-                      const blocks = [sigBytes.slice(0, originLen)];
-                      for (let i = 0; i < N - 1; i++)
-                          blocks.push(sigBytes.slice(originLen + i*blkLen,
-                                                    originLen + (i+1)*blkLen));
-                      return {
-                        bytes, N, mode, alg, index: idx,
-                        sigBytes, originLen, blkLen, blocks
-                      }
-                      // const blkLen = sigBytes.length / N;
-                      // if (!Number.isInteger(blkLen)) throw new Error('div');
-                      // return { bytes, N, mode, alg, index: idx, sigBytes, blkLen };
-                    },
-
-                    /** Импорт origin‑пакета (бывший Importer) */
-                    origin : pkg => {
-                      const bytes = pkg instanceof Uint8Array ? pkg : self._importToBytes(pkg);
-                      const hdr = bytes[1];
-                      if (bytes[0] !== 0x00 || bytes[hdr - 1] !== 0x00) throw new Error('sentinel');
-                      const N = bytes[2], mode = self.decoder.mode[bytes[3]] ?? 'U', alg = self.decoder.algorithm[bytes[4]] ?? 'UNK';
-                      let idx = 0n; for (let i = 5; i < hdr - 1; i++) idx = (idx << 8n) | BigInt(bytes[i]);
-                      const body = bytes.slice(hdr);
-                      const blkLen = body.length / N; if (!Number.isInteger(blkLen)) throw new Error('div');
-                      const origin = []; for (let i = 0; i < N; i++) origin.push(body.slice(i * blkLen, (i + 1) * blkLen));
-                      return { bytes, N, mode, alg, index: idx, blockLen: blkLen, origin };
-                    }
+            import : {
+            /** Импорт подписи (бывший SigImporter) */
+            signature : pkg => {
+              const bytes = pkg instanceof Uint8Array ? pkg : self.convert.importToBytes(pkg);
+              const headerLen = bytes[1];
+              const N   = bytes[2];
+              const mode= self.decoder.mode[bytes[3]] ?? 'U';
+              const alg = self.decoder.algorithm[bytes[4]] ?? 'UNK';
+              let idx=0n; for (let i=5;i<headerLen-1;i++) idx=(idx<<8n)|BigInt(bytes[i]);
+              const sigBytes = bytes.slice(headerLen);
+              const originLen = (self.globalConfig.sign.originSize ?? 256) >>> 3;
+              const restLen   = sigBytes.length - originLen;
+              const blkLen    = restLen / (N - 1);
+              if (restLen < 0 || !Number.isInteger(blkLen))
+                  throw new Error('SigImporter: wrong sizes');
+              const blocks = [sigBytes.slice(0, originLen)];
+              for (let i = 0; i < N - 1; i++)
+                  blocks.push(sigBytes.slice(originLen + i*blkLen, originLen + (i+1)*blkLen));
+              return {
+                bytes, N, mode, alg, index: idx,
+                sigBytes, originLen, blkLen, blocks
+              }
+            },
+            origin : pkg => {
+              const bytes = pkg instanceof Uint8Array ? pkg : self._importToBytes(pkg);
+              const hdr = bytes[1];
+              if (bytes[0] !== 0x00 || bytes[hdr - 1] !== 0x00) throw new Error('sentinel');
+              const N = bytes[2], mode = self.decoder.mode[bytes[3]] ?? 'U', alg = self.decoder.algorithm[bytes[4]] ?? 'UNK';
+              let idx = 0n; for (let i = 5; i < hdr - 1; i++) idx = (idx << 8n) | BigInt(bytes[i]);
+              const body = bytes.slice(hdr);
+              const blkLen = body.length / N; if (!Number.isInteger(blkLen)) throw new Error('div');
+              const origin = []; for (let i = 0; i < N; i++) origin.push(body.slice(i * blkLen, (i + 1) * blkLen));
+              return { bytes, N, mode, alg, index: idx, blockLen: blkLen, origin };
+            }
     },
 
       OriginGenerator: () => {
@@ -306,26 +259,13 @@ class UldaSign {
           default: return a.SignExporter(sigBytes, meta.index, meta.N, meta.mode, meta.alg);
         }
       },
-      Importer: pkg => {
-        // const bytes = pkg instanceof Uint8Array ? pkg : self._importToBytes(pkg);
-        // const hdr = bytes[1];
-        // if (bytes[0] !== 0x00 || bytes[hdr - 1] !== 0x00) throw new Error('sentinel');
-        // const N = bytes[2], mode = self.decoder.mode[bytes[3]] ?? 'U', alg = self.decoder.algorithm[bytes[4]] ?? 'UNK';
-        // let idx = 0n; for (let i = 5; i < hdr - 1; i++) idx = (idx << 8n) | BigInt(bytes[i]);
-        // const body = bytes.slice(hdr);
-        // const blkLen = body.length / N; if (!Number.isInteger(blkLen)) throw new Error('div');
-        // const origin = []; for (let i = 0; i < N; i++) origin.push(body.slice(i * blkLen, (i + 1) * blkLen));
-        // return { bytes, N, mode, alg, index: idx, blockLen: blkLen, origin };
-      },
       StepUp: pkg => {
         const p = a.import.origin(pkg);
         const { origin, blockLen, index } = p;
         const next = origin.slice(1); next.push(a.RandomBlock(blockLen));
         return a.NewExporter({ origin: next }, index + 1n);
       }
-      // остальные методы (Importer, NewExporter, PackSignature, StepUp, etc.) копируем без изменений из v1.2
     };
-
     /* скопируем неизменённые методы из v1.2 */
     const a = this.actions; // alias for brevity (they were defined above)
   }
@@ -335,20 +275,4 @@ class UldaSign {
   async stepUp(pkg) { return this.actions.StepUp(pkg); }
   async sign(pkg) { return this.actions.Sign(pkg); }
   async verify(sigA, sigB) { return this.actions.Verify(sigA, sigB); }
-
-  /* internal helpers for export/import kept from v1.2 */
-  // _export(bytes) {
-  //   switch (this.globalConfig.fmt.export) {
-  //     case 'base64': return this.convert.bytesToBase64(bytes);
-  //     case 'bytes': return bytes;
-  //     case 'hex':
-  //     default: return this.convert.bytesToHex(bytes);
-  //   }
-  // }
-  // _importToBytes(str) {
-  //   const fmt = this.globalConfig.fmt.export;
-  //   return fmt === 'hex' ? this.convert.hexToBytes(str)
-  //        : fmt === 'base64' ? this.convert.base64ToBytes(str)
-  //                           : this.convert.guessToBytes(str);
-  // }
 }

@@ -219,7 +219,7 @@ class UldaSign {
               }
             },
             origin : pkg => {
-              const bytes = pkg instanceof Uint8Array ? pkg : self._importToBytes(pkg);
+              const bytes = pkg instanceof Uint8Array ? pkg : this.convert.importToBytes(pkg);
               const hdr = bytes[1];
               if (bytes[0] !== 0x00 || bytes[hdr - 1] !== 0x00) throw new Error('sentinel');
               const N = bytes[2], mode = self.decoder.mode[bytes[3]] ?? 'U', alg = self.decoder.algorithm[bytes[4]] ?? 'UNK';

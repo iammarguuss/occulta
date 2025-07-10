@@ -16,7 +16,7 @@
         fmt:    { export:'bytes'},
         sign:   { N:5, mode:'S', hash:'SHA-256', originSize:256}
     };
-        const signer = new UldaSign(cfg);
+    const signer = new UldaSign(cfg);
     
     (async ()=>{
         const origin = await signer.New();

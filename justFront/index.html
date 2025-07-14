@@ -8,13 +8,13 @@
     html,body{height:100%;margin:0;background:#121212;color:#e0e0e0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
     #info{font-size:1rem;opacity:.65}
   </style>
-  <script src="main copy.js"></script>
+  <script src="main.js"></script>
   <script>
     // ---- demo run ----
     const cfg={
         version: '1',
         fmt:    { export:'bytes'},
-        sign:   { N:5, mode:'S', hash:'SHA-256', originSize:256}
+        sign:   { N:5, mode:'S', hash:'SHA-256', originSize:256} //2-20k,S/X,sha`s,2^8+
     };
     const signer = new UldaSign(cfg);
     

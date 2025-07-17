@@ -1,23 +1,85 @@
 class UldaSign {
   constructor(cfg = {}) {
     /* ---------- глобальный конфиг ---------- */
-    this.globalConfig = {
-      version: cfg.version ?? '1',
-      fmt: {
+this.globalConfig = {
+  version : cfg.version ?? '1',
+  fmt     : { export: cfg?.fmt?.export ?? 'hex' },
+  sign    : {
+    N         : cfg?.sign?.N          ?? 5,
+    mode      : cfg?.sign?.mode       ?? 'S',
+    hash      : cfg?.sign?.hash       ?? 'SHA-256',
+    originSize: cfg?.sign?.originSize ?? 256,
+    pack      : cfg?.sign?.pack       ?? 'simpleSig'
+  },
+  /* «не-WebCrypto» хешеры живут прямо здесь */
+  externalHashers : cfg.externalHashers ?? {}
+};
 
-        export: cfg?.fmt?.export ?? 'hex'
-      },
-      sign: {
-        N: cfg?.sign?.N ?? 5,
-        mode: cfg?.sign?.mode ?? 'S',
-        hash: cfg?.sign?.hash ?? 'SHA-256',
-        originSize: cfg?.sign?.originSize ?? 256,
-        pack: cfg?.sign?.pack ?? 'simpleSig'
-      }
-    };
+/* удобный алиас (сохраняет совместимость со старым кодом) */
+this.externalHashers = this.globalConfig.externalHashers;
+
+/* ---------- если в cfg.sign передали «сырую» функцию ---------- */
+const s = cfg.sign ?? {};
+if (typeof s.func === 'function') {
+  const id     = s.hash   ?? 'custom';
+  const output = s.output ?? 'bytes';
+
+  this.externalHashers[id] = {
+    fn   : s.func,
+    output,
+    size : s.originSize ?? null,
+    cdn  : s.cdn ?? null,
+    ready: true
+  };
+
+  /* регистрируем 0xFF ↔ id, если это нестандартный алгоритм */
+  if (!this.encoder?.algorithm?.[id]) {
+    /* (encoder/decoder создадим чуть ниже, если их ещё нет) */
+    this.encoder            = this.encoder ?? {};
+    this.encoder.algorithm  = this.encoder.algorithm ?? {};
+    this.decoder            = this.decoder ?? {};
+    this.decoder.algorithm  = this.decoder.algorithm ?? {};
+
+    this.encoder.algorithm[id] = 0xFF;
+    this.decoder.algorithm[0xFF] = id;
+  }
+}
+
     /* ---------- кодовые таблицы ---------- */
-    this.encoder = { mode: { S: 0x01, X: 0x02}, algorithm: { 'SHA-256': 0x01 } };
-    this.decoder = { mode: { 0x01: 'S', 0x02: 'X'}, algorithm: { 0x01: 'SHA-256' } };
+this.encoder = {
+  mode: {
+    S: 0x01,
+    X: 0x02
+  },
+  algorithm: {
+    /* стандартные WebCrypto-совместимые */
+    'SHA-1'    : 0x01,
+    'SHA-256'  : 0x02,
+    'SHA-384'  : 0x03,
+    'SHA-512'  : 0x04,
+
+    /* популярные допы */
+    'SHA3-256' : 0x05,
+    'SHA3-512' : 0x06,
+    'BLAKE3'   : 0x07,
+    'WHIRLPOOL': 0x08,
+
+    /* резерв под один «любой кастомный» */
+    CUSTOM     : 0xFF               // будет привязан динамически
+  }
+};
+
+this.decoder = {
+  mode: {
+    0x01: 'S',
+    0x02: 'X'
+  },
+  algorithm: Object.fromEntries(
+    Object.entries(this.encoder.algorithm)
+          .map(([name, code]) => [code, name])
+  )
+};
+
     /* ---------- convert ---------- */
     this.convert = {
       bytesToHex: u8 => Array.from(u8).map(b => b.toString(16).padStart(2, '0')).join(''),
@@ -73,7 +135,38 @@ class UldaSign {
     /* ---------- crypto helpers ---------- */
     const self = this;
     this.enc = {
-      hash: async (u8, alg = 'SHA-256') => new Uint8Array(await crypto.subtle.digest(alg, u8)),
+      hash: async (u8, alg = 'SHA-256') => {
+    /* 1. WebCrypto, если доступно */
+    const native = ['SHA-1','SHA-256','SHA-384','SHA-512'];
+    if (native.includes(alg))
+      return new Uint8Array(await crypto.subtle.digest(alg, u8));
+
+    /* 2. внешний хешер из globalConfig.externalHashers */
+    const ext = self.globalConfig.externalHashers[alg];
+    if (!ext) throw new Error(`Hasher <${alg}> not registered`);
+
+    if (ext.cdn && !ext.ready) {
+      await UldaSign.loadScriptOnce(ext.cdn);
+      ext.ready = true;
+    }
+
+    const raw = await ext.fn(u8);
+
+    const outType = ext.output ?? (() => { throw new Error(
+      `Hasher <${alg}>: no output type specified`); })();
+
+    const bytes =
+      outType === 'bytes'  ? raw :
+      outType === 'hex'    ? self.convert.hexToBytes(raw) :
+      outType === 'base64' ? self.convert.base64ToBytes(raw) :
+      (() => { throw new Error(`Unsupported output type <${outType}>`) })();
+
+    if (ext.size && bytes.length * 8 !== ext.size)
+      throw new Error(`Hasher <${alg}>: expected ${ext.size} bits, got ${bytes.length*8}`);
+
+    return bytes;
+  },
+
       hashIter: async (u8, times, alg = 'SHA-256') => {
         let h = u8;
         for (let i = 0; i < times; i++) h = await self.enc.hash(h, alg);
@@ -268,8 +361,17 @@ class UldaSign {
     };
     /* скопируем неизменённые методы из v1.2 */
     const a = this.actions; // alias for brevity (they were defined above)
-  }
 
+    
+  }
+static loadScriptOnce(src){
+  return new Promise((res,rej)=>{
+    if (document.querySelector(`script[src="${src}"]`)) return res();
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
   /* ---------- PUBLIC API ---------- */
   async New(i = 0n) { return this.actions.NewExporter(this.actions.OriginGenerator(), i); }
   async stepUp(pkg) { return this.actions.StepUp(pkg); }

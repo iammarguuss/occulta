@@ -12,26 +12,26 @@
   <script src="https://cdn.jsdelivr.net/npm/hash-wasm@4.12.0/dist/whirlpool.umd.min.js"></script>
   <script>
     // // ---- demo run ----
-    // const cfg={
-    //     version: '1',
-    //     fmt:    { export:'bytes'},
-    //     sign:   { N:5, mode:'S', hash:'SHA-256', originSize:256} //2-20k,S/X,sha`s,2^8+
-    // };
+    const cfg={
+        version: '1',
+        fmt:    { export:'bytes'},
+        sign:   { N:5, mode:'X', hash:'SHA-256', originSize:256} //2-20k,S/X,sha`s,2^8+
+    };
     // const signer = new UldaSign(cfg);
 
     // alternative run
     
-const cfg = {
-    fmt : { export : 'bytes' },                     // как было
-    sign: {
-      N: 5, mode: 'X',
-      /* ключевые новинки ↓↓↓↓↓ */
-      hash       : 'WHIRLPOOL',      // идентификатор, с которым работает класс
-      originSize : 512,              // блок-0 = 512 бит (Whirlpool даёт 512-битовый digest)
-      output     : 'hex',            // что вернёт функция (hex/bytes/base64) — по желанию
-      func       : async (u8) => hashwasm.whirlpool(u8)  // «сырая» функция из CDN
-    }
-  };
+// const cfg = {
+//     fmt : { export : 'bytes' },                     // как было
+//     sign: {
+//       N: 5, mode: 'X',
+//       /* ключевые новинки ↓↓↓↓↓ */
+//       hash       : 'WHIRLPOOL',      // идентификатор, с которым работает класс
+//       originSize : 512,              // блок-0 = 512 бит (Whirlpool даёт 512-битовый digest)
+//       output     : 'hex',            // что вернёт функция (hex/bytes/base64) — по желанию
+//       func       : async (u8) => hashwasm.whirlpool(u8)  // «сырая» функция из CDN
+//     }
+//   };
   const signer = new UldaSign(cfg);
 
 

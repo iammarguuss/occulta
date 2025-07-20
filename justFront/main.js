@@ -1,380 +1,309 @@
 class UldaSign {
   constructor(cfg = {}) {
-    /* ---------- глобальный конфиг ---------- */
-this.globalConfig = {
-  version : cfg.version ?? '1',
-  fmt     : { export: cfg?.fmt?.export ?? 'hex' },
-  sign    : {
-    N         : cfg?.sign?.N          ?? 5,
-    mode      : cfg?.sign?.mode       ?? 'S',
-    hash      : cfg?.sign?.hash       ?? 'SHA-256',
-    originSize: cfg?.sign?.originSize ?? 256,
-    pack      : cfg?.sign?.pack       ?? 'simpleSig'
-  },
-  /* «не-WebCrypto» хешеры живут прямо здесь */
-  externalHashers : cfg.externalHashers ?? {}
-};
+    const g = (this.globalConfig = {
+      version: cfg.version ?? "1",
+      fmt: { export: cfg?.fmt?.export ?? "hex" },
+      sign: {
+        N: cfg?.sign?.N ?? 5,
+        mode: cfg?.sign?.mode ?? "S",
+        hash: cfg?.sign?.hash ?? "SHA-256",
+        originSize: cfg?.sign?.originSize ?? 256,
+        pack: cfg?.sign?.pack ?? "simpleSig"
+      },
+      externalHashers: cfg.externalHashers ?? {}
+    });
+    const self = this;
+    this.externalHashers = g.externalHashers;
+    const s = cfg.sign ?? {};
+    if (typeof s.func === "function") {
+      const id = s.hash ?? "custom";
+      g.externalHashers[id] = {
+        fn: s.func,
+        output: s.output ?? "bytes",
+        size: s.originSize ?? null,
+        cdn: s.cdn ?? null,
+        ready: true
+      };
+      this.encoder = this.encoder ?? { algorithm: {} };
+      this.decoder = this.decoder ?? { algorithm: {} };
+      this.encoder.algorithm[id] = 0xff;
+      this.decoder.algorithm[0xff] = id;
+    }
 
-/* удобный алиас (сохраняет совместимость со старым кодом) */
-this.externalHashers = this.globalConfig.externalHashers;
+    this.encoder = {
+      mode: { S: 1, X: 2 },
+      algorithm: {
+        "SHA-1": 1,
+        "SHA-256": 2,
+        "SHA-384": 3,
+        "SHA-512": 4,
+        "SHA3-256": 5,
+        "SHA3-512": 6,
+        BLAKE3: 7,
+        WHIRLPOOL: 8,
+        CUSTOM: 0xff
+      }
+    };
+    this.decoder = {
+      mode: { 1: "S", 2: "X" },
+      algorithm: Object.fromEntries(
+        Object.entries(this.encoder.algorithm).map(([n, c]) => [c, n])
+      )
+    };
 
-/* ---------- если в cfg.sign передали «сырую» функцию ---------- */
-const s = cfg.sign ?? {};
-if (typeof s.func === 'function') {
-  const id     = s.hash   ?? 'custom';
-  const output = s.output ?? 'bytes';
-
-  this.externalHashers[id] = {
-    fn   : s.func,
-    output,
-    size : s.originSize ?? null,
-    cdn  : s.cdn ?? null,
-    ready: true
-  };
-
-  /* регистрируем 0xFF ↔ id, если это нестандартный алгоритм */
-  if (!this.encoder?.algorithm?.[id]) {
-    /* (encoder/decoder создадим чуть ниже, если их ещё нет) */
-    this.encoder            = this.encoder ?? {};
-    this.encoder.algorithm  = this.encoder.algorithm ?? {};
-    this.decoder            = this.decoder ?? {};
-    this.decoder.algorithm  = this.decoder.algorithm ?? {};
-
-    this.encoder.algorithm[id] = 0xFF;
-    this.decoder.algorithm[0xFF] = id;
-  }
-}
-
-    /* ---------- кодовые таблицы ---------- */
-this.encoder = {
-  mode: {
-    S: 0x01,
-    X: 0x02
-  },
-  algorithm: {
-    /* стандартные WebCrypto-совместимые */
-    'SHA-1'    : 0x01,
-    'SHA-256'  : 0x02,
-    'SHA-384'  : 0x03,
-    'SHA-512'  : 0x04,
-
-    /* популярные допы */
-    'SHA3-256' : 0x05,
-    'SHA3-512' : 0x06,
-    'BLAKE3'   : 0x07,
-    'WHIRLPOOL': 0x08,
-
-    /* резерв под один «любой кастомный» */
-    CUSTOM     : 0xFF               // будет привязан динамически
-  }
-};
-
-this.decoder = {
-  mode: {
-    0x01: 'S',
-    0x02: 'X'
-  },
-  algorithm: Object.fromEntries(
-    Object.entries(this.encoder.algorithm)
-          .map(([name, code]) => [code, name])
-  )
-};
-
-    /* ---------- convert ---------- */
-    this.convert = {
-      bytesToHex: u8 => Array.from(u8).map(b => b.toString(16).padStart(2, '0')).join(''),
+    const cv = (this.convert = {
+      bytesToHex: u8 =>
+        [...u8].map(b => b.toString(16).padStart(2, "0")).join(""),
       hexToBytes: str => Uint8Array.from(str.match(/../g).map(h => parseInt(h, 16))),
       bytesToBase64: u8 => btoa(String.fromCharCode(...u8)),
       base64ToBytes: str => Uint8Array.from(atob(str), c => c.charCodeAt(0)),
-      guessToBytes: str => (/^[0-9a-f]+$/i.test(str) && str.length % 2 === 0)
-        ? this.convert.hexToBytes(str)
-        : this.convert.base64ToBytes(str),
+      guessToBytes: str =>
+        /^[0-9a-f]+$/i.test(str) && str.length % 2 === 0
+          ? cv.hexToBytes(str)
+          : cv.base64ToBytes(str),
       indexToBytes: idx => {
-        const b = typeof idx === 'bigint' ? idx : BigInt(idx);
+        let b = typeof idx === "bigint" ? idx : BigInt(idx);
         if (b === 0n) return Uint8Array.of(0);
-        const arr = []; let tmp = b;
-        while (tmp > 0n) { arr.unshift(Number(tmp & 0xffn)); tmp >>= 8n; }
-        return Uint8Array.from(arr);
+        const r = [];
+        while (b > 0n) {
+          r.unshift(Number(b & 0xffn));
+          b >>= 8n;
+        }
+        return Uint8Array.from(r);
       },
       concatBytes: (...arrs) => {
-        const len = arrs.reduce((s, a) => s + a.length, 0);
-        const out = new Uint8Array(len); let off = 0;
-        arrs.forEach(a => { out.set(a, off); off += a.length; });
+        const out = new Uint8Array(arrs.reduce((s, a) => s + a.length, 0));
+        let off = 0;
+        arrs.forEach(a => (out.set(a, off), (off += a.length)));
         return out;
       },
-      equalBytes: (a, b) => {
-        if (a.length !== b.length) return false;
-        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-        return true;
-      },
-      export : (bytes) => {
-        switch (self.globalConfig.fmt.export) {
-          case 'base64' : return self.convert.bytesToBase64(bytes);
-          case 'bytes'  : return bytes;
-          case 'hex'    :
-          default       : return self.convert.bytesToHex(bytes);
+      equalBytes: (a, b) => a.length === b.length && a.every((v, i) => v === b[i]),
+      export: bytes =>
+        ({ base64: cv.bytesToBase64, bytes: x => x, hex: cv.bytesToHex }[
+          g.fmt.export
+        ] ?? cv.bytesToHex)(bytes),
+      importToBytes: d =>
+        d instanceof Uint8Array
+          ? d
+          : ({ hex: cv.hexToBytes, base64: cv.base64ToBytes }[g.fmt.export] ??
+              cv.guessToBytes)(d),
+      splitSig: p =>
+        p.blocks ??
+        (() => {
+          const { originLen, blkLen, sigBytes, N } = p,
+            a = [sigBytes.slice(0, originLen)];
+          for (let i = 0; i < N - 1; i++)
+            a.push(sigBytes.slice(originLen + i * blkLen, originLen + (i + 1) * blkLen));
+          return a;
+        })()
+    });
+
+    const enc = (this.enc = {
+      hash: async (u8, alg = "SHA-256") => {
+        if (["SHA-1", "SHA-256", "SHA-384", "SHA-512"].includes(alg))
+          return new Uint8Array(await crypto.subtle.digest(alg, u8));
+        const ext = g.externalHashers[alg];
+        if (!ext) throw `Hasher <${alg}> not registered`;
+        if (ext.cdn && !ext.ready) {
+          await UldaSign.loadScriptOnce(ext.cdn);
+          ext.ready = true;
         }
+        const raw = await ext.fn(u8),
+          fmt = ext.output ?? "bytes",
+          bytes =
+            fmt === "bytes"
+              ? raw
+              : fmt === "hex"
+              ? cv.hexToBytes(raw)
+              : fmt === "base64"
+              ? cv.base64ToBytes(raw)
+              : (() => {
+                  throw `Unsupported output ${fmt}`;
+                })();
+        if (ext.size && bytes.length * 8 !== ext.size)
+          throw `Hasher <${alg}> size mismatch`;
+        return bytes;
       },
-      /** Импорт ← строки/Uint8Array согласно текущему fmt */
-      importToBytes : (data) => {
-        if (data instanceof Uint8Array) return data;
-        const fmt = self.globalConfig.fmt.export;
-        return fmt === 'hex'    ? self.convert.hexToBytes(data)
-              : fmt === 'base64' ? self.convert.base64ToBytes(data)
-                                : self.convert.guessToBytes(data);
-      },
-      splitSig: p => {
-        if (p.blocks) return p.blocks;        // уже готово
-        const { originLen, blkLen, sigBytes, N } = p;
-        const a = [sigBytes.slice(0, originLen)];
-        for (let i = 0; i < N - 1; i++)
-          a.push(sigBytes.slice(originLen + i*blkLen, originLen + (i+1)*blkLen));
-        return a;
-      }
-    };
-    /* ---------- crypto helpers ---------- */
-    const self = this;
-    this.enc = {
-      hash: async (u8, alg = 'SHA-256') => {
-    /* 1. WebCrypto, если доступно */
-    const native = ['SHA-1','SHA-256','SHA-384','SHA-512'];
-    if (native.includes(alg))
-      return new Uint8Array(await crypto.subtle.digest(alg, u8));
-
-    /* 2. внешний хешер из globalConfig.externalHashers */
-    const ext = self.globalConfig.externalHashers[alg];
-    if (!ext) throw new Error(`Hasher <${alg}> not registered`);
-
-    if (ext.cdn && !ext.ready) {
-      await UldaSign.loadScriptOnce(ext.cdn);
-      ext.ready = true;
-    }
-
-    const raw = await ext.fn(u8);
-
-    const outType = ext.output ?? (() => { throw new Error(
-      `Hasher <${alg}>: no output type specified`); })();
-
-    const bytes =
-      outType === 'bytes'  ? raw :
-      outType === 'hex'    ? self.convert.hexToBytes(raw) :
-      outType === 'base64' ? self.convert.base64ToBytes(raw) :
-      (() => { throw new Error(`Unsupported output type <${outType}>`) })();
-
-    if (ext.size && bytes.length * 8 !== ext.size)
-      throw new Error(`Hasher <${alg}>: expected ${ext.size} bits, got ${bytes.length*8}`);
-
-    return bytes;
-  },
-
-      hashIter: async (u8, times, alg = 'SHA-256') => {
+      hashIter: async (u8, t, alg = "SHA-256") => {
         let h = u8;
-        for (let i = 0; i < times; i++) h = await self.enc.hash(h, alg);
+        for (let i = 0; i < t; i++) h = await enc.hash(h, alg);
         return h;
       },
-      ladder: async (blocks, mode = 'S', alg = 'SHA-256') => {
-        switch (mode) {
-          case 'X': return self.enc._ladderX(blocks, alg);
-          case 'S': return self.enc._ladderS(blocks, alg);
-          default:  return self.enc._ladderS(blocks, alg);
-        }
-      },
+      ladder: async (blocks, mode = "S", alg = "SHA-256") =>
+        mode === "X" ? enc._ladderX(blocks, alg) : enc._ladderS(blocks, alg),
       _ladderS: async (blocks, alg) => {
-        const sigBlocks = [];
-        for (let i = 0; i < blocks.length; i++) {
-          sigBlocks.push(await self.enc.hashIter(blocks[i], i, alg));
-        }
-        return { sigBlocks, final: sigBlocks.at(-1) };
+        const sig = [];
+        for (let i = 0; i < blocks.length; i++)
+          sig.push(await enc.hashIter(blocks[i], i, alg));
+        return { sigBlocks: sig, final: sig.at(-1) };
       },
-      _ladderX: async (blocks, alg = 'SHA-256') => {
-        if (!Array.isArray(blocks) || blocks.length === 0)
-          throw new Error('_ladderX: blocks[] must be non‑empty array');
-    
-        const cat = self.convert.concatBytes;
-        const sigBlocks = [blocks[0]];           // tₖ
-        let prevRow = blocks;                    // текущая «горизонталь»
-    
+      _ladderX: async (blocks, alg = "SHA-256") => {
+        if (!blocks?.length) throw "_ladderX: empty blocks";
+        const cat = cv.concatBytes,
+          sig = [blocks[0]];
+        let prev = blocks;
         for (let d = 1; d < blocks.length; d++) {
-          /* считаем следующий ряд Fᵢᵈ = H(prev[i] ∥ prev[i+1]) */
-          const curRow = [];
-          for (let i = 0; i < prevRow.length - 1; i++)
-            curRow.push(await self.enc.hash(cat(prevRow[i], prevRow[i + 1]), alg));
-          sigBlocks.push(curRow[0]);             // F_d^d = вершина столбца d
-          prevRow = curRow;
+          const cur = [];
+          for (let i = 0; i < prev.length - 1; i++)
+            cur.push(await enc.hash(cat(prev[i], prev[i + 1]), alg));
+          sig.push(cur[0]);
+          prev = cur;
         }
-        return { sigBlocks, final: sigBlocks.at(-1) };
+        return { sigBlocks: sig, final: sig.at(-1) };
       }
-    };
+    });
 
-    /* ---------- actions ---------- */
-    this.actions = {
-      /* --- подпись и упаковка --- */
+    let a;
+    this.actions = a = {
       Sign: async pkg => {
-        const p = this.actions.import.origin(pkg);
-        const { origin, mode, alg, index, N } = p;
-        const { sigBlocks } = await self.enc.ladder(origin, mode, alg);
-        const sigBytes = self.convert.concatBytes(...sigBlocks);
-        return this.actions.PackSignature(sigBytes, { index, N, mode, alg });
+        const p = a.import.origin(pkg),
+          { origin, mode, alg, index, N } = p,
+          { sigBlocks } = await enc.ladder(origin, mode, alg);
+        return a.PackSignature(cv.concatBytes(...sigBlocks), { index, N, mode, alg });
       },
-      /* --- верификация двух подписей --- */
-      VerifyS: async (oldSig, newSig) => {
-        const older = oldSig.index < newSig.index ? oldSig : newSig;
-        const newer = oldSig.index < newSig.index ? newSig : oldSig;
-        const g = Number(newer.index - older.index);
-        if (g <= 0 || g >= older.N) return false; // пропуск≥N невозможен
-        if (older.originLen !== newer.originLen ||
-            older.blkLen    !== newer.blkLen) return false;
-        const oldBlocks = this.convert.splitSig(older);
-        const newBlocks = this.convert.splitSig(newer);
-        for (let i = 0; i < older.N - g; i++) {
-          const hashed = await self.enc.hashIter(newBlocks[i], g, older.alg);
-//        console.log("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",hashed,oldBlocks[i + g])
-          if (!self.convert.equalBytes(hashed, oldBlocks[i + g])) return false;
-        }
+      VerifyS: async (o, n) => {
+        const older = o.index < n.index ? o : n,
+          newer = o.index < n.index ? n : o,
+          g = Number(newer.index - older.index);
+        if (g <= 0 || g >= older.N) return false;
+        if (older.originLen !== newer.originLen || older.blkLen !== newer.blkLen)
+          return false;
+        const ob = cv.splitSig(older),
+          nb = cv.splitSig(newer);
+        for (let i = 0; i < older.N - g; i++)
+          if (
+            !cv.equalBytes(await enc.hashIter(nb[i], g, older.alg), ob[i + g])
+          )
+            return false;
         return true;
       },
-      VerifyX: async (sigA, sigB) => {
-        /* упорядочим: older = Sₖ, newer = Sₖ₊₁ */
-        const older = sigA.index < sigB.index ? sigA : sigB;
-        const newer = sigA.index < sigB.index ? sigB : sigA;
-        const g = Number(newer.index - older.index);
-        if (g !== 1) return false;                // X разрешает только «+1»
-    
+      VerifyX: async (sa, sb) => {
+        const older = sa.index < sb.index ? sa : sb,
+          newer = sa.index < sb.index ? sb : sa;
+        if (Number(newer.index - older.index) !== 1) return false;
         const { N } = older;
-        /* разобьём sigBytes → массив блоков длиной N */
-        if (older.sigBytes.length !== newer.sigBytes.length ||
-            older.sigBytes.length % N !== 0) return false;
-        const blkLen = older.sigBytes.length / N;
-        const A = this.convert.splitSig(older);
-        const B = this.convert.splitSig(newer);
-        const cat = self.convert.concatBytes;
-        /* правило:  A[d] ?= H( A[d‑1] ∥ B[d‑1] ),   d = 1…N‑1  */
-        for (let d = 1; d < N; d++) {
-          const expect = await self.enc.hash(cat(A[d - 1], B[d - 1]), older.alg);
-          if (!self.convert.equalBytes(expect, A[d])) return false;
-        }
-        return true;                              // подпись Sₖ₊₁ принята
-      },
-      VerifyXS: async (sigA, sigB) => {
-        const older = sigA.index < sigB.index ? sigA : sigB;
-        const newer = sigA.index < sigB.index ? sigB : sigA;
-        const g = Number(newer.index - older.index);
-        if (g <= 0 || g >= older.N) return false;      // 1…N‑1
-
-        /* восстановим полные лестницы */
-        const rawOld = [older.diag[0], ...older.tail]; // tₖ … tₖ₊N‑1
-        const rawNew = [newer.diag[0], ...newer.tail]; // tₖ₊g … tₖ₊g+N‑1
-        const rowsOld = await self.enc._ladderFull(rawOld, older.alg);
-        const rowsNew = await self.enc._ladderFull(rawNew, newer.alg);
-
-        const N = older.N, cat = self.convert.concatBytes;
-        /* правило перекрытия — точно как для «полной» X */
-        for (let d = 0; d < N; d++) {
-          const len = N - d;
-          for (let i = 0; i < len - g; i++) {
-            if (!self.convert.equalBytes(rowsOld[d][i+g], rowsNew[d][i]))
-              return false;
-          }
-        }
+        if (
+          older.sigBytes.length !== newer.sigBytes.length ||
+          older.sigBytes.length % N
+        )
+          return false;
+        const A = cv.splitSig(older),
+          B = cv.splitSig(newer),
+          cat = cv.concatBytes;
+        for (let d = 1; d < N; d++)
+          if (
+            !cv.equalBytes(
+              await enc.hash(cat(A[d - 1], B[d - 1]), older.alg),
+              A[d]
+            )
+          )
+            return false;
         return true;
       },
-      Verify: async (sigPkgA, sigPkgB) => {
-        const A = this.actions.import.signature(sigPkgA);
-        const B = this.actions.import.signature(sigPkgB);
+      Verify: async (aSig, bSig) => {
+        const A = a.import.signature(aSig),
+          B = a.import.signature(bSig);
         if (A.N !== B.N || A.mode !== B.mode || A.alg !== B.alg) return false;
-        switch (A.mode) {
-          case 'S': return this.actions.VerifyS(A, B);
-          case 'X': return this.actions.VerifyX(A, B);
-          default: return false;
+        return A.mode === "S"
+          ? a.VerifyS(A, B)
+          : A.mode === "X"
+          ? a.VerifyX(A, B)
+          : false;
+      },
+      import: {
+        signature: pkg => {
+          const bytes =
+              pkg instanceof Uint8Array ? pkg : cv.importToBytes(pkg),
+            hdr = bytes[1],
+            N = bytes[2],
+            mode = self.decoder.mode[bytes[3]] ?? "U",
+            alg = self.decoder.algorithm[bytes[4]] ?? "UNK";
+          let idx = 0n;
+          for (let i = 5; i < hdr - 1; i++) idx = (idx << 8n) | BigInt(bytes[i]);
+          const sigBytes = bytes.slice(hdr),
+            originLen = (g.sign.originSize ?? 256) >>> 3,
+            rest = sigBytes.length - originLen,
+            blkLen = rest / (N - 1);
+          if (rest < 0 || !Number.isInteger(blkLen)) throw "SigImporter sizes";
+          const blocks = [sigBytes.slice(0, originLen)];
+          for (let i = 0; i < N - 1; i++)
+            blocks.push(sigBytes.slice(originLen + i * blkLen, originLen + (i + 1) * blkLen));
+          return { bytes, N, mode, alg, index: idx, sigBytes, originLen, blkLen, blocks };
+        },
+        origin: pkg => {
+          const bytes =
+              pkg instanceof Uint8Array ? pkg : cv.importToBytes(pkg),
+            hdr = bytes[1];
+          if (bytes[0] || bytes[hdr - 1]) throw "sentinel";
+          const N = bytes[2],
+            mode = self.decoder.mode[bytes[3]] ?? "U",
+            alg = self.decoder.algorithm[bytes[4]] ?? "UNK";
+          let idx = 0n;
+          for (let i = 5; i < hdr - 1; i++) idx = (idx << 8n) | BigInt(bytes[i]);
+          const body = bytes.slice(hdr),
+            blkLen = body.length / N;
+          if (!Number.isInteger(blkLen)) throw "div";
+          const origin = [];
+          for (let i = 0; i < N; i++)
+            origin.push(body.slice(i * blkLen, (i + 1) * blkLen));
+          return { bytes, N, mode, alg, index: idx, blockLen: blkLen, origin };
         }
       },
-            import : {
-            /** Импорт подписи (бывший SigImporter) */
-            signature : pkg => {
-              const bytes = pkg instanceof Uint8Array ? pkg : self.convert.importToBytes(pkg);
-              const headerLen = bytes[1];
-              const N   = bytes[2];
-              const mode= self.decoder.mode[bytes[3]] ?? 'U';
-              const alg = self.decoder.algorithm[bytes[4]] ?? 'UNK';
-              let idx=0n; for (let i=5;i<headerLen-1;i++) idx=(idx<<8n)|BigInt(bytes[i]);
-              const sigBytes = bytes.slice(headerLen);
-              const originLen = (self.globalConfig.sign.originSize ?? 256) >>> 3;
-              const restLen   = sigBytes.length - originLen;
-              const blkLen    = restLen / (N - 1);
-              if (restLen < 0 || !Number.isInteger(blkLen))
-                  throw new Error('SigImporter: wrong sizes');
-              const blocks = [sigBytes.slice(0, originLen)];
-              for (let i = 0; i < N - 1; i++)
-                  blocks.push(sigBytes.slice(originLen + i*blkLen, originLen + (i+1)*blkLen));
-              return {
-                bytes, N, mode, alg, index: idx,
-                sigBytes, originLen, blkLen, blocks
-              }
-            },
-            origin : pkg => {
-              const bytes = pkg instanceof Uint8Array ? pkg : this.convert.importToBytes(pkg);
-              const hdr = bytes[1];
-              if (bytes[0] !== 0x00 || bytes[hdr - 1] !== 0x00) throw new Error('sentinel');
-              const N = bytes[2], mode = self.decoder.mode[bytes[3]] ?? 'U', alg = self.decoder.algorithm[bytes[4]] ?? 'UNK';
-              let idx = 0n; for (let i = 5; i < hdr - 1; i++) idx = (idx << 8n) | BigInt(bytes[i]);
-              const body = bytes.slice(hdr);
-              const blkLen = body.length / N; if (!Number.isInteger(blkLen)) throw new Error('div');
-              const origin = []; for (let i = 0; i < N; i++) origin.push(body.slice(i * blkLen, (i + 1) * blkLen));
-              return { bytes, N, mode, alg, index: idx, blockLen: blkLen, origin };
-            }
-    },
-
       OriginGenerator: () => {
-        const { N, originSize } = self.globalConfig.sign;
-        const len = originSize >>> 3;
-        return { origin: Array.from({ length: N }, () => a.RandomBlock(len)) };
+        const len = g.sign.originSize >>> 3;
+        return {
+          origin: Array.from({ length: g.sign.N }, () => a.RandomBlock(len))
+        };
       },
-      RandomBlock: len => { const u = new Uint8Array(len); crypto.getRandomValues(u); return u; },
-      _buildHeader: (N, mode, alg, idxBytes) => {
-        const hdrLen = 5 + idxBytes.length + 1;
-        const h = new Uint8Array(hdrLen);
-        h[0] = 0x00; h[1] = hdrLen & 0xff; h[2] = N & 0xff;
-        h[3] = self.encoder.mode[mode] ?? 0xff; h[4] = self.encoder.algorithm[alg] ?? 0xff;
-        h.set(idxBytes, 5); h[hdrLen - 1] = 0x00; return h;
+      RandomBlock: len => crypto.getRandomValues(new Uint8Array(len)),
+      _hdr: (N, mode, alg, idxBytes) => {
+        const h = new Uint8Array(5 + idxBytes.length + 1);
+        h.set([0, h.length, N, self.encoder.mode[mode] ?? 255, self.encoder.algorithm[alg] ?? 255]);
+        h.set(idxBytes, 5);
+        h[h.length - 1] = 0;
+        return h;
       },
       NewExporter: (originObj, index = 0n) => {
-        const { N, mode, hash } = self.globalConfig.sign;
-        const hdr = a._buildHeader(N, mode, hash, self.convert.indexToBytes(index));
-        return self.convert.export(self.convert.concatBytes(hdr, ...originObj.origin));
+        const { N, mode, hash } = g.sign,
+          hdr = a._hdr(N, mode, hash, cv.indexToBytes(index));
+        return cv.export(cv.concatBytes(hdr, ...originObj.origin));
       },
       SignExporter: (sigBytes, index, N, mode, hash) => {
-        const hdr = a._buildHeader(N, mode, hash, self.convert.indexToBytes(index));
-        return self.convert.export(self.convert.concatBytes(hdr, sigBytes));
+        const hdr = a._hdr(N, mode, hash, cv.indexToBytes(index));
+        return cv.export(cv.concatBytes(hdr, sigBytes));
       },
-      PackSignature: (sigBytes, meta) => {
-        switch (self.globalConfig.sign.pack) {
-          case 'simpleSig':
-          default: return a.SignExporter(sigBytes, meta.index, meta.N, meta.mode, meta.alg);
-        }
-      },
+      PackSignature: (sigBytes, m) =>
+        a.SignExporter(sigBytes, m.index, m.N, m.mode, m.alg),
       StepUp: pkg => {
-        const p = a.import.origin(pkg);
-        const { origin, blockLen, index } = p;
-        const next = origin.slice(1); next.push(a.RandomBlock(blockLen));
+        const { origin, blockLen, index } = a.import.origin(pkg),
+          next = origin.slice(1);
+        next.push(a.RandomBlock(blockLen));
         return a.NewExporter({ origin: next }, index + 1n);
       }
     };
-    /* скопируем неизменённые методы из v1.2 */
-    const a = this.actions; // alias for brevity (they were defined above)
-
-    
   }
-static loadScriptOnce(src){
-  return new Promise((res,rej)=>{
-    if (document.querySelector(`script[src="${src}"]`)) return res();
-    const s = document.createElement('script');
-    s.src = src; s.onload = res; s.onerror = rej;
-    document.head.appendChild(s);
-  });
-}
-  /* ---------- PUBLIC API ---------- */
-  async New(i = 0n) { return this.actions.NewExporter(this.actions.OriginGenerator(), i); }
-  async stepUp(pkg) { return this.actions.StepUp(pkg); }
-  async sign(pkg) { return this.actions.Sign(pkg); }
-  async verify(sigA, sigB) { return this.actions.Verify(sigA, sigB); }
+
+  static loadScriptOnce(src) {
+    return new Promise((res, rej) => {
+      if (document.querySelector(`script[src="${src}"]`)) return res();
+      const s = document.createElement("script");
+      s.src = src;
+      s.onload = res;
+      s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+
+  New(i = 0n) {
+    return this.actions.NewExporter(this.actions.OriginGenerator(), i);
+  }
+  stepUp(pkg) {
+    return this.actions.StepUp(pkg);
+  }
+  sign(pkg) {
+    return this.actions.Sign(pkg);
+  }
+  verify(a, b) {
+    return this.actions.Verify(a, b);
+  }
 }

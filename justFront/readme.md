@@ -370,9 +370,9 @@ graph TD
     subgraph domain
         OG[OriginGenerator] --> NE[NewExporter]
     end
-    OG -.crypto.rand.-> RB[RandomBlock]
+    OG -.->|crypto.rand| RB[RandomBlock]
     NE --> exportFmt((convert.export))
-    exportFmt --> "Origin bytes/out"
+    exportFmt --> OB["Origin bytes/out"]
 ```
 
 1. `actions.OriginGenerator` builds *N* random blocks via `RandomBlock`.  

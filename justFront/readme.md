@@ -370,9 +370,9 @@ graph TD
     subgraph domain
         OG[OriginGenerator] --> NE[NewExporter]
     end
-    OG -.crypto.rand.-> RB[RandomBlock]
+    OG -.->|crypto.rand| RB[RandomBlock]
     NE --> exportFmt((convert.export))
-    exportFmt --> "Origin bytes/out"
+    exportFmt --> OB["Origin bytes/out"]
 ```
 
 1. `actions.OriginGenerator` builds *N* random blocks via `RandomBlock`.  
@@ -497,7 +497,7 @@ Every method except the constructor is **async** and therefore returns a
 
 ---
 
-## 5.1 Method catalogue
+## 5.1 Method catalogue
 
 | Method | Signature (ES) | Async | Returns |
 |--------|----------------|-------|---------|
@@ -513,7 +513,7 @@ Every method except the constructor is **async** and therefore returns a
 
 ---
 
-## 5.2 Calling conventions
+## 5.2 Calling conventions
 
 * **Always await.** All heavy work (randomness, hashing, network scripts)
   is async, so use `await` / `.then()`.
@@ -525,15 +525,15 @@ Every method except the constructor is **async** and therefore returns a
 
 ---
 
-## 5.3 Method reference
+## 5.3 Method reference
 
-### 5.3.1 constructor(cfg?)
+### 5.3.1 constructor(cfg?)
 
 Creates an instance, merges `cfg` with defaults (see § 3) and registers
 any custom hashers supplied via `cfg.sign` or `externalHashers`.  
 Malformed configs throw synchronously. :contentReference[oaicite:6]{index=6}
 
-### 5.3.2 `New(idx = 0n)`
+### 5.3.2 `New(idx = 0n)`
 
 *Generates the first generation (Origin ₀) or any index you pass.*
 
@@ -541,7 +541,7 @@ Malformed configs throw synchronously. :contentReference[oaicite:6]{index=6}
 * Complexity: **O(N)** random bytes, no hashing.  
 * Output size: `idxHdr + N × originSize/8`.
 
-### 5.3.3 `stepUp(originPkg)`
+### 5.3.3 `stepUp(originPkg)`
 
 *“Ages” the chain by one: drops the oldest block, appends a new random
 tail, bumps index.*
@@ -549,7 +549,7 @@ tail, bumps index.*
 * Complexity: **O(N)** byte copy + `originSize` RNG.  
 * Header is rebuilt; previous generations remain valid.
 
-### 5.3.4 `sign(originPkg)`
+### 5.3.4 `sign(originPkg)`
 
 *Calculates the Signature for a given Origin.*
 
@@ -557,7 +557,7 @@ tail, bumps index.*
 * S‑ladder cost ≈ *N(N‑1)/2* hashes; X‑ladder identical order but hashes
   pairs, not iterations. :contentReference[oaicite:7]{index=7}
 
-### 5.3.5 `verify(sigA, sigB)`
+### 5.3.5 `verify(sigA, sigB)`
 
 *Checks that `sigB` is the direct successor of `sigA`.*
 
@@ -565,7 +565,7 @@ tail, bumps index.*
 * X‑mode: succeeds **only** if gap = 1 (strict sequence).  
 * Returns `false` on any mismatch; never throws.
 
-### 5.3.6 `loadScriptOnce(url)`
+### 5.3.6 `loadScriptOnce(url)`
 
 Loads a `<script src="url">` exactly once, resolves when `onload`
 fires. Used automatically for CDN‑based hashers but exposed for manual
@@ -573,9 +573,9 @@ pre‑loading. Idempotent and race‑safe. :contentReference[oaicite:8]{index=8}
 
 ---
 
-## 5.4 Usage examples
+## 5.4 Usage examples
 
-### 5.4.1 Hello World
+### 5.4.1 Hello World
 
 ```html
 <script src="main.js"></script>
@@ -590,7 +590,7 @@ pre‑loading. Idempotent and race‑safe. :contentReference[oaicite:8]{index=8}
 </script>
 ```
 
-### 5.4.2 Rolling snapshot pipeline
+### 5.4.2 Rolling snapshot pipeline
 
 ```js
 const signer = new UldaSign({ sign: { N: 8, mode: 'S' } });
@@ -603,7 +603,7 @@ for (let gen = 0; gen < 5; gen++) {
 }
 ```
 
-### 5.4.3 Parallel verification (Web Worker)
+### 5.4.3 Parallel verification (Web Worker)
 
 Main thread:
 
@@ -625,7 +625,7 @@ onmessage = async ({ data }) => {
 
 ---
 
-## 5.5 Complexity & fault surface
+## 5.5 Complexity & fault surface
 
 | Method | Work (hash ops) | Throws | Returns `false` |
 |--------|-----------------|--------|-----------------|
@@ -640,7 +640,7 @@ Implementation defends against malformed headers (`sentinel`, `div`,
 signals any integrity problem with `false`. :contentReference[oaicite:9]{index=9}
 
 
-# 6 Data Formats
+# 6 Data Formats
 
 > This chapter formalises the **binary on‑wire layout** produced and
 > consumed by `UldaSign`. It covers the common header, the two payload
@@ -649,7 +649,7 @@ signals any integrity problem with `false`. :contentReference[oaicite:9]{index=9
 
 ---
 
-## 6.1 Binary header (`_hdr`)
+## 6.1 Binary header (`_hdr`)
 
 Every package starts with a self‑describing header:
 
@@ -676,7 +676,7 @@ Example for `N = 5`, `mode = X`, `alg = SHA‑256`, `index = 3`:
 
 ---
 
-## 6.2 Origin package
+## 6.2 Origin package
 
 Layout   `_hdr  ‖  block₀ ‖ block₁ … block_{N‑1}`
 

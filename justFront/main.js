@@ -307,3 +307,6 @@ class UldaSign {
     return this.actions.Verify(a, b);
   }
 }
+
+export default UldaSign;
+if (typeof window !== 'undefined' && !window.UldaSign) window.UldaSign = UldaSign;

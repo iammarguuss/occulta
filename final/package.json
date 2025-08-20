@@ -1,0 +1,48 @@
+{
+  "name": "ulda-sign",
+  "version": "0.1.0",
+  "description": "UldaSign — reference implementation of ULDA signature",
+  "license": "SEE LICENSE IN LICENSE-ULDA-COMMERCIAL",
+  "author": "TODO: Your Name",
+  "repository": { "type": "git", "url": "git+https://github.com/TODO-yourname/ulda-sign.git" },
+  "bugs": { "url": "https://github.com/TODO-yourname/ulda-sign/issues" },
+  "homepage": "https://github.com/TODO-yourname/ulda-sign#readme",
+
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/ulda-sign.mjs",
+      "require": "./dist/ulda-sign.cjs",
+      "default": "./dist/ulda-sign.mjs"
+    }
+  },
+  "main": "./dist/ulda-sign.cjs",
+  "module": "./dist/ulda-sign.mjs",
+  "unpkg": "./dist/ulda-sign.umd.js",
+  "jsdelivr": "./dist/ulda-sign.umd.js",
+  "types": "./types/index.d.ts",
+
+  "bin": { "uldacli": "./bin/uldacli.js" },
+
+  "files": ["dist", "bin", "README.md", "LICENSE-ULDA-COMMERCIAL", "types"],
+  "keywords": ["ulda", "ulda-sign", "signature", "crypto", "webcrypto", "hash", "ladder"],
+  "engines": { "node": ">=18" },
+  "sideEffects": false,
+
+  "scripts": {
+    "clean": "rimraf dist",
+    "build:esm": "esbuild src/main.js --bundle --format=esm --outfile=dist/ulda-sign.mjs --sourcemap",
+    "build:cjs": "esbuild src/main.js --bundle --format=cjs --outfile=dist/ulda-sign.cjs --sourcemap",
+    "build:umd": "esbuild src/main.js --bundle --format=iife --global-name=UldaSign --outfile=dist/ulda-sign.umd.js --sourcemap",
+    "build": "npm run clean && npm run build:esm && npm run build:cjs && npm run build:umd",
+    "cli:dev": "node bin/uldacli.js",
+    "prepublishOnly": "npm run build"
+  },
+
+  "devDependencies": {
+    "esbuild": "^0.23.0",
+    "rimraf": "^6.0.0"
+  },
+
+  "publishConfig": { "access": "public" }
+}

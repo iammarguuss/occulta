@@ -33,8 +33,8 @@ The desired ladder type is selected via the constructor field `sign.mode` (`"S"`
 
 | Method | Instruction |
 |--------|-------------|
-| **npm** | *coming soon* |
-| **CDN** | *coming soon* |
+| **npm** | *npm i ulda-sign* |
+| **CDN** | *https://cdn.jsdelivr.net/npm/ulda-sign@1.0.6/dist/ulda-sign.cjs.min.js* |
 | **Local script (development build)** | 1. Copy `main.js` next to your HTML page.<br>2. Load it **before** your own code (see the snippet below). |
 
 ```html
